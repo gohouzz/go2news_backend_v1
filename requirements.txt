@@ -3,3 +3,7 @@ requests
 flask-cors
 gunicorn
 python-dotenv
+psycopg2-binary
+pypika
+APScheduler
+sshtunnel
