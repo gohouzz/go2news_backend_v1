@@ -525,8 +525,9 @@ def get_cached_articles_by_type2(params):
                     print(col_type)
                     if not isinstance(val, list):
                         val = [val]
-                    array_where_clauses.append(f"{col} && %s::text[]")
-                    array_values.append(val)
+                    # Use ANY() approach instead of && for better compatibility
+                    array_where_clauses.append(f"'{{{','.join(val)}}}' && {col}")
+                    # Don't add to array_values since we're embedding the values directly
                 elif col_type in ("varchar", "text"):
                     q = q.where(getattr(news, col) == val)
                 elif col_type == "bigint":
@@ -552,20 +553,28 @@ def get_cached_articles_by_type2(params):
                     search_columns = search_params_mapping[col]
                     # Create OR conditions for searching across multiple columns
                     search_conditions = []
+                    array_search_conditions = []
                     for search_col in search_columns:
                         if search_col in column_types:
                             # Use ILIKE for case-insensitive substring search
-                            search_conditions.append(getattr(news, search_col).ilike(f"%{val}%"))
-                    
+                            col_type = column_types[search_col]
+                            if col_type == "text_array":
+                                # For text_array columns, use ANY() operator for substring search
+                                array_search_conditions.append(f"ANY({search_col}) ILIKE '%{val}%'")
+                            else:
+                                # For varchar/text columns, use regular PyPika ILIKE
+                                search_conditions.append(getattr(news, search_col).ilike(f"%{val}%"))
+                        
+   
                     if search_conditions:
-                        # Combine all search conditions with OR
-                        # combined_condition = " OR ".join([getattr(news, sc).ilike(f"%{val}%") for sc in search_columns])
-                        # q = q.where(combined_condition)
-                        if search_conditions:
-                            condition = search_conditions[0]
-                            for c in search_conditions[1:]:
-                                condition |= c  # logical OR chaining
-                            q = q.where(condition)
+                        condition = search_conditions[0]
+                        for c in search_conditions[1:]:
+                            condition |= c  # logical OR chaining
+                        q = q.where(condition)
+
+                    if array_search_conditions:
+        # Handle array conditions separately
+                        array_where_clauses.extend(array_search_conditions)
 
         # Limit if size param
         # q = q.orderby(news.pub_date, order=Order.desc)
@@ -588,9 +597,7 @@ def get_cached_articles_by_type2(params):
         print("Placeholder count:", sql.count('%s'))
         print("Param count:", len(array_values))
 
-        # For PostgreSQL array parameters with %s::text[], pass the list directly
-        # PostgreSQL will handle the conversion automatically
-        print("Original array_values:", array_values)
+        # Execute query - array_values should be empty now since arrays are embedded
         cur.execute(sql, array_values)
         columns = [desc[0] for desc in cur.description]
         articles = []
