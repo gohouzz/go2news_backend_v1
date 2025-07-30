@@ -1,0 +1,12 @@
+Flask
+requests
+flask-cors
+gunicorn
+python-dotenv
+SQLAlchemy
+Flask-SQLAlchemy
+Flask-Migrate
+psycopg2-binary
+sshtunnel
+APScheduler
+newsdataapi
